@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Rust Screen Share</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
+<style>
+  /* ====== BASIC STYLING ====== */
+  body {
+    font-family: 'Rajdhani', sans-serif;
+    color: #E8F0FF;
+    background: #0A0A20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 20px;
+    min-height: 100vh;
+  }
+  h1 { font-family: 'Orbitron', monospace; font-size: 2.5rem; background: linear-gradient(135deg, #FF8C42, #0A84FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .panel { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  input[type=text] { padding: 6px 10px; font-size: 12px; }
+  button { padding: 6px 12px; cursor: pointer; }
+  video { width: 400px; max-width: 100%; border: 2px solid #0A84FF; margin: 8px 0; }
+  .videos { display: flex; flex-wrap: wrap; gap: 12px; }
+</style>
+</head>
+<body>
+<h1>Rust Screen Share</h1>
+
+<div class="panel">
+  <input type="text" id="roomCode" placeholder="Enter room code"/>
+  <button onclick="joinRoom()">Join Room</button>
+  <button id="startBtn" onclick="startShare()">▶ Start Share</button>
+  <button id="stopBtn" onclick="stopShare()" disabled>■ Stop Share</button>
+</div>
+
+<div class="videos">
+  <div>
+    <p>Your Screen:</p>
+    <video id="screen" autoplay playsinline></video>
+  </div>
+  <div>
+    <p>Friend's Screen:</p>
+    <video id="friendScreen" autoplay playsinline></video>
+  </div>
+</div>
+
+<script>
+let peer = null;
+let currentStream = null;
+let connStream = null;
+let roomCode = '';
+
+async function startShare() {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    currentStream = stream;
+    document.getElementById('screen').srcObject = stream;
+    document.getElementById('screen').style.display = 'block';
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = false;
+
+    if (peer) {
+      // answer any incoming calls with this stream
+      peer.on('call', call => {
+        call.answer(currentStream);
+        call.on('stream', friendStream => {
+          document.getElementById('friendScreen').srcObject = friendStream;
+        });
+      });
+    }
+  } catch(err) {
+    alert('Screen share denied or failed');
+    console.error(err);
+  }
+}
+
+function stopShare() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+    currentStream = null;
+  }
+  document.getElementById('screen').srcObject = null;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+}
+
+function joinRoom() {
+  roomCode = document.getElementById('roomCode').value.trim();
+  if (!roomCode) return alert('Enter a valid room code');
+
+  peer = new Peer(roomCode); // PeerJS ID = room code
+
+  peer.on('open', id => {
+    console.log('Connected as Peer ID:', id);
+    alert('Connected! Share the same room code with your friend.');
+
+    // call friend if they are already online
+    try {
+      if (currentStream) {
+        const call = peer.call(roomCode, currentStream);
+        call.on('stream', friendStream => {
+          document.getElementById('friendScreen').srcObject = friendStream;
+        });
+      }
+    } catch(e) {}
+  });
+
+  peer.on('call', call => {
+    if (!currentStream) {
+      alert('You must start your screen first!');
+      return;
+    }
+    call.answer(currentStream);
+    call.on('stream', friendStream => {
+      document.getElementById('friendScreen').srcObject = friendStream;
+    });
+  });
+}
+</script>
+</body>
+</html>
